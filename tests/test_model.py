@@ -14,6 +14,7 @@ from src.data.schema import TARGET_COLUMN
 from src.model.artifacts import load_model, next_version_dir, save_artifacts
 from src.model.dataset import split_xy, train_val_split
 from src.model.evaluate import compute_metrics, ks_statistic, save_calibration_plot
+from src.model.report import build_report
 from src.model.train import train_model
 
 
@@ -195,3 +196,25 @@ def test_save_artifacts_roundtrips_and_refuses_overwrite(tmp_path, split):
             y_val_prob=prob,
             metadata={},
         )
+
+
+# --- report (read-only w.r.t. models/) -----------------------------------
+
+
+@pytest.mark.parametrize(
+    "bad_path",
+    ["models/v1/calibration.png", "models", "./models/v9/x.png"],
+)
+def test_build_report_refuses_plot_path_inside_models_dir(bad_path):
+    # Guard runs before any model/data is loaded, so no fixtures are needed.
+    with pytest.raises(ValueError, match="immutable"):
+        build_report("v1", plot_path=bad_path)
+
+
+def test_build_report_allows_plot_path_outside_models_dir(tmp_path, monkeypatch):
+    # Path is accepted (guard passes); it then fails later for lack of a real
+    # model dir, which is a different error than the guard's ValueError.
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(Exception) as exc:
+        build_report("v1", plot_path=tmp_path / "out.png")
+    assert "immutable" not in str(exc.value)
