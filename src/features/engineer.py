@@ -1,0 +1,40 @@
+"""Interpretable feature engineering for Give Me Some Credit.
+
+Kept deliberately small: ratios and bins that a loan officer can reason
+about, rather than broad automated feature combinatorics. This is what
+keeps the later SHAP/adverse-action story readable.
+"""
+
+import pandas as pd
+
+_AGE_BIN_EDGES = [0, 25, 35, 45, 55, 65, 120]
+_AGE_BIN_LABELS = ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"]
+
+
+def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Add ratio, flag, and binned/encoded features to a cleaned DataFrame.
+
+    Expects `clean_data` output (no missing values in age/income/dependents/
+    past-due columns).
+    """
+    df = df.copy()
+
+    df["total_past_due_count"] = (
+        df["NumberOfTime30-59DaysPastDueNotWorse"]
+        + df["NumberOfTime60-89DaysPastDueNotWorse"]
+        + df["NumberOfTimes90DaysLate"]
+    )
+    df["has_past_due"] = (df["total_past_due_count"] > 0).astype(int)
+
+    df["income_per_dependent"] = df["MonthlyIncome"] / (df["NumberOfDependents"] + 1)
+    df["has_dependents"] = (df["NumberOfDependents"] > 0).astype(int)
+
+    df["credit_lines_per_year_of_age"] = (
+        df["NumberOfOpenCreditLinesAndLoans"] / df["age"]
+    )
+
+    age_bin = pd.cut(df["age"], bins=_AGE_BIN_EDGES, labels=_AGE_BIN_LABELS)
+    age_dummies = pd.get_dummies(age_bin, prefix="age_bin", dtype=int)
+    df = pd.concat([df, age_dummies], axis=1)
+
+    return df
