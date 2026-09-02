@@ -15,7 +15,7 @@ Pipeline runs end to end from the command line and over HTTP.
 - ✅ Explainability — per-application SHAP contributions as structured data
 - ✅ LLM layer — SHAP dict → ECOA-style adverse-action text (Claude, `claude-haiku-4-5` by default)
 - ✅ Backend — FastAPI wrapping the whole pipeline, SQLite audit log
-- ⬜ Frontend — loan-officer review UI
+- ✅ Frontend — React + Vite loan-officer review UI (`app/frontend/`)
 - ⬜ Fairness audit — disparate-impact ratios
 
 ## Architecture
@@ -66,11 +66,10 @@ flowchart TB
     S --> O
     L --> O
     O --> OUT["JSON response<br/>decision + explanation + notice"]
-    OUT --> FE["app/frontend<br/>loan-officer review UI · planned"]
+    OUT --> FE["app/frontend<br/>React + Vite · loan-officer review UI"]
 
     style DEC stroke:#2e7d32,stroke-width:2px
     style EXP stroke:#1565c0,stroke-width:2px
-    style FE stroke-dasharray:5 5
 ```
 
 The gradient-boosted model produces the score **and** the decision; SHAP
@@ -188,6 +187,25 @@ Run against `models/v1` with a real API key (`llm_provider: anthropic`,
 
 Age and every age-derived feature are excluded from `reason_features`
 regardless of SHAP rank (Regulation B, 12 CFR 1002.6(b)(2)).
+
+## Run the frontend
+
+A React + Vite loan-officer UI over the API: a form to run new applications
+through `/review`, a filterable queue of stored records, and a per-record view
+with the probability placed against the two cutoffs, a diverging SHAP chart of
+the per-feature contributions, and the adverse-action notice for denials.
+
+```bash
+uvicorn app.backend.main:app --reload      # backend on :8000 (as above)
+
+cd app/frontend
+npm install
+npm run dev                                # http://localhost:5173
+```
+
+The dev server proxies `/api/*` to the backend, so no CORS setup is needed
+locally. A separately hosted build calls the API cross-origin; list its origin
+in `AIU_CORS_ORIGINS`. See `app/frontend/README.md` for details.
 
 ## Tests
 ```bash

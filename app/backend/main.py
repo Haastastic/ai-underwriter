@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.backend.config import Settings, load_env_file, settings_from_env
 from app.backend.llm_client import build_llm_client
@@ -57,7 +58,17 @@ def create_app(
     service: UnderwritingService | None = None,
 ) -> FastAPI:
     app = FastAPI(title="AI Underwriter", version="1.0.0")
-    app.state.service = service or build_service(settings)
+    svc = service or build_service(settings)
+    app.state.service = svc
+
+    # The loan-officer frontend (Phase 7) is a separate origin in development.
+    if svc.settings.cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(svc.settings.cors_origins),
+            allow_methods=["GET", "POST"],
+            allow_headers=["Content-Type"],
+        )
 
     @app.get("/health", response_model=HealthOut)
     def health(svc: ServiceDep) -> HealthOut:
@@ -95,7 +106,7 @@ def create_app(
         decision: str | None = None,
     ) -> list[ReviewRecordOut]:
         return [
-            _record_out(r)
+            _record_out(r, svc.settings)
             for r in svc.store.list(limit=limit, offset=offset, decision=decision)
         ]
 
@@ -104,7 +115,7 @@ def create_app(
         record = svc.store.get(review_id)
         if record is None:
             raise HTTPException(status_code=404, detail="review not found")
-        return _record_out(record)
+        return _record_out(record, svc.settings)
 
     return app
 
@@ -132,7 +143,7 @@ def __getattr__(name: str):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def _record_out(record: dict) -> ReviewRecordOut:
+def _record_out(record: dict, settings: Settings) -> ReviewRecordOut:
     return ReviewRecordOut(
         id=record["id"],
         created_at=record["created_at"],
@@ -141,7 +152,13 @@ def _record_out(record: dict) -> ReviewRecordOut:
         decision=DecisionOut(
             decision=record["decision"],
             probability=record["probability"],
-            thresholds={},
+            # The store predates a thresholds column; report the policy the
+            # service is currently configured with so the frontend can place
+            # a persisted score against the same two cutoffs.
+            thresholds={
+                "approve_below": settings.approve_below,
+                "deny_at_or_above": settings.deny_at_or_above,
+            },
         ),
         explanation=ExplanationOut(**record["explanation"]),
         adverse_action=(

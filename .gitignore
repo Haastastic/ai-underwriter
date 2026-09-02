@@ -23,6 +23,10 @@ models/**
 *.db
 *.sqlite3
 
+# Frontend (app/frontend/ has its own .gitignore too)
+node_modules/
+app/frontend/dist/
+
 # Secrets
 .env
 
