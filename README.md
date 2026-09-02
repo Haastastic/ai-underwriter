@@ -18,6 +18,66 @@ Pipeline runs end to end from the command line and over HTTP.
 - ⬜ Frontend — loan-officer review UI
 - ⬜ Fairness audit — disparate-impact ratios
 
+## Architecture
+
+```mermaid
+flowchart TB
+    CSV[("cs-training.csv")]
+    REQ["application<br/>10 raw fields"]
+
+    subgraph TRAIN["training · offline"]
+      D1["src/data + src/features<br/>clean · engineer"]
+      D2["src/model/train<br/>XGBoost + early stopping"]
+      D1 --> D2 --> ART[("models/v1/<br/>model · clean stats<br/>eval report · calibration")]
+    end
+    CSV --> D1
+
+    subgraph SERVE["serving · per application"]
+      PREP["src/features/prepare<br/>single-row clean + align to model features"]
+
+      subgraph DEC["risk decision — no LLM"]
+        M["src/model<br/>predict_proba → P(default)"]
+        P["src/model/decision<br/>two cutoffs → approved / referred / denied"]
+        M --> P
+      end
+
+      subgraph EXP["explanation only"]
+        S["src/explain<br/>SHAP → per-feature contributions"]
+        R["src/llm/reasons<br/>pick top factors · exclude age (Reg B)"]
+        PR["src/llm/prompt<br/>build ECOA-style prompt"]
+        L["Claude · claude-haiku-4-5<br/>render adverse-action notice"]
+        S --> R --> PR --> L
+      end
+
+      PREP --> M
+      PREP --> S
+      P -->|"denied only"| R
+    end
+
+    REQ --> PREP
+    ART -. loaded at startup .-> M
+    ART -. loaded at startup .-> PREP
+
+    subgraph API["app/backend · FastAPI"]
+      O["service orchestration"] --> DB[("SQLite<br/>review audit log")]
+    end
+
+    P --> O
+    S --> O
+    L --> O
+    O --> OUT["JSON response<br/>decision + explanation + notice"]
+    OUT --> FE["app/frontend<br/>loan-officer review UI · planned"]
+
+    style DEC stroke:#2e7d32,stroke-width:2px
+    style EXP stroke:#1565c0,stroke-width:2px
+    style FE stroke-dasharray:5 5
+```
+
+The gradient-boosted model produces the score **and** the decision; SHAP
+explains it; the LLM only turns the SHAP output into adverse-action prose,
+and only for denials. Nothing on the explanation path feeds back into the
+decision.
+
 ## Layout
 ```
 data/            raw and processed datasets (gitignored)
