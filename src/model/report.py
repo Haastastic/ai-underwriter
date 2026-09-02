@@ -21,7 +21,7 @@ import json
 from pathlib import Path
 
 from src.model.artifacts import load_model
-from src.model.config import RANDOM_SEED, VAL_FRACTION
+from src.model.config import RANDOM_SEED, VAL_FRACTION, align_features
 from src.model.dataset import build_model_frame, split_xy, train_val_split
 from src.model.evaluate import evaluate_predictions
 from src.model.train import DEFAULT_DATA_PATH
@@ -59,11 +59,9 @@ def build_report(
 
     df = build_model_frame(data_path)
     X, y = split_xy(df)
-    if list(X.columns) != list(feature_names):
-        raise ValueError(
-            "Feature columns from the pipeline no longer match the saved model's "
-            f"feature_names.json for {version}"
-        )
+    # A version may use a subset of the pipeline's columns (v2 leaves age
+    # out); a column the model expects but the pipeline lacks is an error.
+    X = align_features(X, feature_names)
     _, X_val, _, y_val = train_val_split(X, y, VAL_FRACTION, RANDOM_SEED)
     y_val_prob = model.predict_proba(X_val)[:, 1]
 

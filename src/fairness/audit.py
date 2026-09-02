@@ -31,7 +31,7 @@ from src.fairness.metrics import (
     group_rates,
 )
 from src.model.artifacts import load_model
-from src.model.config import RANDOM_SEED, VAL_FRACTION
+from src.model.config import RANDOM_SEED, VAL_FRACTION, align_features
 from src.model.dataset import build_model_frame, split_xy, train_val_split
 from src.model.decision import APPROVE_BELOW, DENY_AT_OR_ABOVE
 
@@ -47,26 +47,26 @@ def score_frame(
     deny_at_or_above: float = DENY_AT_OR_ABOVE,
     y_true: pd.Series | None = None,
 ) -> pd.DataFrame:
-    """Model + feature matrix -> a per-applicant frame ready for the audit.
+    """Model + engineered frame -> a per-applicant frame ready for the audit.
 
-    ``features`` must already be the engineered, model-ready matrix (the
-    output of ``src.model.dataset.split_xy``), including the raw ``age``
-    column. Returns a DataFrame with columns::
+    ``features`` is the engineered pipeline output (``split_xy``'s ``X``). It
+    must carry the raw ``age`` column -- that is what the audit groups on --
+    and every column in ``feature_names``. The model is scored on exactly
+    ``feature_names``; any other column (for a version like v2 that excludes
+    age from the model, that is ``age`` itself and the age-derived features)
+    is used only for grouping, never for scoring. Returns a DataFrame with
+    columns::
 
         age  age_band  probability  decision  [defaulted]
 
     ``defaulted`` is included only when ``y_true`` is passed.
     """
-    if list(features.columns) != list(feature_names):
-        raise ValueError(
-            "features columns do not match the model's feature_names; refusing "
-            "to score a misaligned matrix"
-        )
     if "age" not in features.columns:
         raise ValueError("features frame has no 'age' column to group on")
+    model_input = align_features(features, feature_names)
 
     probability = pd.Series(
-        model.predict_proba(features)[:, 1], index=features.index, name="probability"
+        model.predict_proba(model_input)[:, 1], index=features.index, name="probability"
     )
     decision = assign_decision_band(
         probability.to_numpy(), approve_below, deny_at_or_above
@@ -105,11 +105,10 @@ def build_audit_frame(
     model, feature_names = load_model(Path(models_root) / version)
     df = build_model_frame(data_path)
     X, y = split_xy(df)
-    if list(X.columns) != list(feature_names):
-        raise ValueError(
-            "feature columns from the data pipeline no longer match the saved "
-            f"model's feature_names.json for {version}"
-        )
+    # Fail early if the pipeline no longer produces something the model
+    # expects; extra columns (age, for a version that excludes it) are kept
+    # for grouping and dropped from the model input in score_frame.
+    align_features(X, feature_names)
 
     if split == "val":
         _, X, _, y = train_val_split(X, y, VAL_FRACTION, RANDOM_SEED)

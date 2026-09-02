@@ -17,6 +17,7 @@ Pipeline runs end to end from the command line and over HTTP.
 - ✅ Backend — FastAPI wrapping the whole pipeline, SQLite audit log
 - ✅ Frontend — React + Vite loan-officer review UI (`app/frontend/`)
 - ✅ Fairness audit — age-band selection/denial rates, disparate-impact ratios, four-fifths rule (`src/fairness/`)
+- ✅ Model v2 — less-discriminatory alternative: age and every age-derived feature removed, re-tuned, re-audited ([comparison](#model-v2--the-less-discriminatory-alternative))
 
 ## Architecture
 
@@ -114,9 +115,18 @@ under `data/raw/`. Not committed to the repo.
 
 ## Train a model
 ```bash
-python -m src.model.train            # writes models/v1/ (model, eval report, calibration plot)
-python -m src.model.report v1        # re-print a version's AUC / KS / Brier
+python -m src.model.train                 # v1 config -> next free models/vN/ (model, eval report, calibration plot)
+python -m src.model.train --config v2     # v2 config: no age features, re-tuned hyperparameters
+python -m src.model.report v1             # re-print a version's AUC / KS / Brier
+python -m scripts.tune_hparams --config v2 --out /tmp/v2_grid.csv   # the CV grid behind v2's params
 ```
+
+A model version is a **config** (`src/model/config.py`: which engineered
+columns the model may see, plus XGBoost hyperparameters), not a code fork.
+Every version shares the same seed and stratified train/validation split,
+so eval reports are directly comparable. Each version's `metadata.json`
+also records the decision cutoffs recommended for its calibration (see
+[Model v2](#model-v2--the-less-discriminatory-alternative)).
 
 ## Command-line pipeline
 ```bash
@@ -143,7 +153,8 @@ uvicorn app.backend.main:app --reload
 
 The model outputs `P(serious delinquency)`; `src/model/decision.py` applies
 two cutoffs (tuned on the v1 validation split, overridable via
-`AIU_APPROVE_BELOW` / `AIU_DENY_AT_OR_ABOVE`):
+`AIU_APPROVE_BELOW` / `AIU_DENY_AT_OR_ABOVE` — v2's recommended values are
+`0.08` / `0.28`, see below):
 
 | Band | Rule | Adverse-action notice |
 | --- | --- | --- |
@@ -229,7 +240,12 @@ back — it cannot change a score or a decision (the core architectural rule).
 python -m src.fairness.report v1                 # audit models/v1 on the validation split
 python -m src.fairness.report v1 --split all     # audit on the whole dataset
 python -m src.fairness.report v1 --print-only    # print, write no artifact
+python -m src.fairness.report v2                 # audit v2 under the cutoffs recorded in its metadata.json
 ```
+
+Cutoffs come from `--approve-below` / `--deny-at-or-above` if given, else
+from the version's `metadata.json` (`recommended_cutoffs`), else from the
+code defaults; the summary line says which.
 
 The JSON report is written to `models/<version>/fairness_audit.json`,
 alongside the model it audits; the model's own immutable files are never
@@ -297,6 +313,112 @@ e.g. removing `age` and the age-derived features from the model, or
 constraining/monitoring their effect — followed by re-running this audit;
 the point of keeping the audit as its own layer is that such a change is
 measured here without touching the decision, explanation, or LLM code.
+That search is what model v2, below, does.
+
+## Model v2 — the less-discriminatory alternative
+
+v2 is the first step of that search: **`age` and every age-derived feature
+(`age_bin_*`, `credit_lines_per_year_of_age`) are removed from the model**,
+the hyperparameters are re-tuned by a small 3-fold CV grid on the training
+split (`scripts/tune_hparams.py`), and the audit is re-run. Nothing else
+changes: same data pipeline, same seed and split, same SHAP → reasons →
+LLM path, same three-band decision code. v1 remains the default model;
+serving v2 is configuration:
+
+```bash
+AIU_MODEL_VERSION=v2 AIU_APPROVE_BELOW=0.08 AIU_DENY_AT_OR_ABOVE=0.28 uvicorn app.backend.main:app
+```
+
+The serving path aligns each application to the loaded version's
+`feature_names.json`, so v2 needs no backend change; the audit still groups
+by age because it reads `age` from the cleaned data, not from the model's
+features. One property v2 has that v1 does not: two applications that
+differ only in age get the *identical* score (`tests/test_model_config.py`
+checks this).
+
+**Feature set and hyperparameters.** 23 features → 15. Five candidate
+interpretable replacement features (monthly debt payment, has-real-estate
+flag, unsecured-line count, utilization > 100% flag, 90-day share of
+past-dues) were each tried and none moved validation AUC by more than
+±0.0005, so no new feature was added. The CV grid was flat (0.0006 AUC
+across the whole grid, fold std ≈ 0.004); v2 keeps v1's depth 4 and takes a
+slower, more regularised setting (`learning_rate` 0.05 → 0.03,
+`min_child_weight` 5 → 20, `reg_lambda` 1 → 5, early-stopped at 337 rounds
+vs 209).
+
+**Cutoffs.** v2's probabilities sit on almost the same scale as v1's, so
+the same policy reasoning (keep ≈ 80 % auto-approved and ≈ 6 % auto-denied,
+then read off the default rate each band carries) gives `approve_below =
+0.08`, `deny_at_or_above = 0.28`. They are recorded in
+`models/v2/metadata.json` as `recommended_cutoffs`; the code defaults in
+`src/model/decision.py` are unchanged (v1 is still the default). Under v1's
+`0.30` the fairness picture below is the same to two decimals.
+
+### v1 vs v2 — validation split, n = 30 000
+
+| | v1 | v2 | Δ |
+| --- | --- | --- | --- |
+| features | 23 | 15 (no age-derived) | −8 |
+| AUC-ROC | 0.8697 | 0.8655 | −0.0042 |
+| KS statistic | 0.585 | 0.572 | −0.014 |
+| Brier score | 0.04887 | 0.04900 | +0.00014 |
+| cutoffs | 0.08 / 0.30 | 0.08 / 0.28 | |
+| approved — share / observed default rate | 79.5 % / 2.1 % | 79.5 % / 2.2 % | |
+| referred — share / observed default rate | 14.8 % / 15.7 % | 14.4 % / 14.8 % | |
+| denied — share / observed default rate | 5.7 % / 46.7 % | 6.1 % / 45.5 % | |
+
+| age band | n | observed default rate | v1 approval | v1 approval AIR | v1 denial ratio | v2 approval | v2 approval AIR | v2 denial ratio |
+| --- | --: | --: | --: | --: | --: | --: | --: | --: |
+| 18-24 | 572 | 11.9 % | 57.7 % | **0.611** | **8.64** | 61.9 % | **0.677** | **5.13** |
+| 25-34 | 3 737 | 12.1 % | 62.9 % | **0.667** | **10.12** | 68.6 % | **0.750** | **6.97** |
+| 35-44 | 5 944 | 8.8 % | 72.2 % | **0.765** | **7.21** | 74.5 % | 0.815 | **5.03** |
+| 45-54 | 7 361 | 7.5 % | 76.4 % | 0.809 | **5.97** | 77.1 % | 0.843 | **4.30** |
+| 55-64 | 6 637 | 4.2 % | 87.8 % | 0.930 | **2.71** | 84.1 % | 0.920 | **2.36** |
+| 65+ | 5 749 | 2.2 % | 94.4 % | 1.000 | 1.00 | 91.4 % | 1.000 | 1.00 |
+| **four-fifths rule** | | | | **REVIEW** (min AIR 0.611, max ratio 10.1) | | | **REVIEW** (min AIR 0.677, max ratio 7.0) | |
+
+(Bold = fails the 0.80 AIR / 1.25 denial-ratio flag. The acceptance AIR —
+approved *or* referred — passes for every band under both models: min
+0.897 for v1, 0.901 for v2. `models/v1/fairness_audit.json` in the repo was
+written with `--split all`; the numbers above are all on the held-out
+validation split so the two models are compared on the same rows.)
+
+### The honest tradeoff
+
+- **What it cost:** −0.004 AUC and −0.014 KS. Brier is unchanged to four
+  decimals; the band shares and per-band default rates are essentially the
+  same, so the portfolio-level risk of the policy did not move. The tuning
+  recovered about +0.0005 AUC of the −0.0047 lost by dropping the features —
+  the search surface is flat and there is little to recover.
+- **What it bought:** the youngest band's approval AIR rose from 0.61 to
+  0.68, 35-44 now clears 0.80, and the worst denial-rate ratio fell from
+  10.1× to 7.0×. Those are real reductions, and v2 is age-blind at the
+  individual level.
+- **What it did not buy:** v2 **still fails the four-fifths rule**, on both
+  the approval AIR (18-24, 25-34) and the denial-rate ratio (every band but
+  65+). The reason is visible in the "observed default rate" column: the
+  outcome itself runs from 12 % for the youngest applicants to 2 % for the
+  oldest, and the remaining features (utilization, past-due counts,
+  real-estate lines, income) carry a good part of that age signal. Any
+  accurate model of this outcome will approve older applicants more often;
+  removing `age` removes the *direct* channel, not the correlation. It also
+  slightly mis-calibrates by group — v2's mean predicted probability is now
+  below the observed default rate for 18-24 (9.6 % vs 11.9 %) and above it
+  for 65+ (3.2 % vs 2.2 %), which is the cost of forbidding the model a true
+  signal.
+
+So v2 is a *less* discriminatory alternative, not a non-discriminatory one.
+The next steps in a real search would be to measure and constrain the
+strongest age proxies among the remaining features, to decide whether the
+strict approval AIR or the acceptance AIR is the right test for a policy
+whose middle band is reviewed by a person, and to weigh the (small) AUC
+cost against the (partial) disparity reduction as a business and legal
+judgement rather than a modelling one. For reference, Regulation B does
+permit age in an "empirically derived, demonstrably and statistically
+sound" credit-scoring system provided applicants 62 and older are not
+assigned a negative factor (12 CFR 1002.6(b)(2)(ii)) — v1's use of age is
+the permitted kind, and v2 is the stricter alternative that a
+disparate-impact review would ask to see evaluated.
 
 ## Tests
 ```bash
