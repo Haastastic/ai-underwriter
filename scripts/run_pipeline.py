@@ -32,7 +32,7 @@ from src.model.train import DEFAULT_DATA_PATH
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--row", type=int, default=0, help="row index in the dataset")
-    parser.add_argument("--version", default="v1", help="model version dir name")
+    parser.add_argument("--version", default="v2", help="model version dir name")
     parser.add_argument("--data", type=Path, default=DEFAULT_DATA_PATH)
     parser.add_argument("--models-root", type=Path, default=Path("models"))
     parser.add_argument("--max-reasons", type=int, default=4)

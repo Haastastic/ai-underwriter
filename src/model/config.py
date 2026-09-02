@@ -5,7 +5,7 @@ A model version is fully described by (a) its :class:`ModelConfig` entry in
 is reproducible from the CSV alone::
 
     python -m src.model.train --config v1
-    python -m src.model.train --config v2
+    python -m src.model.train --config v2      # the default
 
 The two things a config controls:
 
@@ -133,7 +133,9 @@ V2 = ModelConfig(
 )
 
 MODEL_CONFIGS: dict[str, ModelConfig] = {V1.name: V1, V2.name: V2}
-DEFAULT_CONFIG = V1.name
+# v2 is the shipped default: what `python -m src.model.train` builds and what
+# the API serves unless AIU_MODEL_VERSION says otherwise.
+DEFAULT_CONFIG = V2.name
 
 
 def get_config(name_or_config: str | ModelConfig = DEFAULT_CONFIG) -> ModelConfig:

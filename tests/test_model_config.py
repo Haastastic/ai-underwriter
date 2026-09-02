@@ -137,11 +137,11 @@ def test_every_age_derived_name_is_a_real_pipeline_column(pipeline_columns):
 # --- config registry ----------------------------------------------------
 
 
-def test_registry_has_v1_and_v2_and_v1_is_default():
+def test_registry_has_v1_and_v2_and_v2_is_default():
     assert {"v1", "v2"} <= set(MODEL_CONFIGS)
-    assert DEFAULT_CONFIG == "v1"
-    assert get_config() is MODEL_CONFIGS["v1"]
-    assert get_config("v2") is MODEL_CONFIGS["v2"]
+    assert DEFAULT_CONFIG == "v2"
+    assert get_config() is MODEL_CONFIGS["v2"]
+    assert get_config("v1") is MODEL_CONFIGS["v1"]
     cfg = ModelConfig(name="x", description="ad hoc")
     assert get_config(cfg) is cfg
 

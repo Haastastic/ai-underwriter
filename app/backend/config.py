@@ -48,7 +48,7 @@ def load_env_file(path: str | Path = ENV_FILE) -> bool:
 @dataclass(frozen=True)
 class Settings:
     models_root: Path = Path("models")
-    model_version: str = "v1"
+    model_version: str = "v2"
     training_data_path: Path = Path("data/raw/cs-training.csv")
     db_path: Path = Path("underwriter.db")
     llm_model: str = DEFAULT_MODEL

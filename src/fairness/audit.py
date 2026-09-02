@@ -85,7 +85,7 @@ def score_frame(
 
 
 def build_audit_frame(
-    version: str = "v1",
+    version: str = "v2",
     data_path: str | Path = DEFAULT_DATA_PATH,
     *,
     models_root: str | Path = "models",
@@ -207,7 +207,7 @@ def audit_decisions(
 
 
 def run_audit(
-    version: str = "v1",
+    version: str = "v2",
     data_path: str | Path = DEFAULT_DATA_PATH,
     *,
     models_root: str | Path = "models",

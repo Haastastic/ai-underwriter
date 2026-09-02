@@ -355,7 +355,10 @@ def trained(tmp_path_factory):
     csv_path = root / "cs-training.csv"
     _write_synthetic_raw_csv(csv_path)
     models_root = root / "models"
-    run_training(csv_path, models_root=models_root, version_dir=models_root / "v1")
+    # Pin the v1 config (the training default is now v2): the audit must
+    # work on a model that *does* use age, and the tests probe it with the
+    # full pipeline frame.
+    run_training(csv_path, models_root=models_root, version_dir=models_root / "v1", config="v1")
     return {"csv": csv_path, "models_root": models_root}
 
 

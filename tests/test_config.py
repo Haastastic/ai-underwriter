@@ -56,9 +56,9 @@ def test_settings_from_env_defaults(monkeypatch):
 
     settings = settings_from_env()
 
-    assert settings.model_version == "v1"
+    assert settings.model_version == "v2"
     assert settings.approve_below == 0.08
-    assert settings.deny_at_or_above == 0.30
+    assert settings.deny_at_or_above == 0.28
     assert "http://localhost:5173" in settings.cors_origins
 
 
