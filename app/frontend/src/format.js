@@ -1,7 +1,8 @@
 // Presentation helpers shared across components. No API or React here.
 
-// Short axis-friendly labels for the model's engineered feature set
-// (models/v1/feature_names.json). Age bands are handled by prefix below.
+// Short axis-friendly labels for the full engineered feature set (see
+// models/v*/feature_names.json; v2 omits age and the age-derived names, so a
+// given version may use a subset). Age bands are handled by prefix below.
 export const FEATURE_LABELS = {
   RevolvingUtilizationOfUnsecuredLines: "Revolving credit utilization",
   age: "Age",

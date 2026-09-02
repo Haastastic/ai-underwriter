@@ -106,7 +106,11 @@ def settings(tmp_path_factory):
     root = tmp_path_factory.mktemp("aiu")
     csv_path = root / "cs-training.csv"
     _write_synthetic_raw_csv(csv_path)
-    run_training(csv_path, models_root=root / "models", version_dir=root / "models" / "v1")
+    # Pin the v1 config: these tests assert on the full 23-feature set, and
+    # the training default is now v2.
+    run_training(
+        csv_path, models_root=root / "models", version_dir=root / "models" / "v1", config="v1"
+    )
     return Settings(
         models_root=root / "models",
         model_version="v1",

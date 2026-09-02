@@ -4,7 +4,7 @@ import { pct } from "../format.js";
 // working a referred case can see at a glance how close it sits to each line.
 export default function ProbabilityBar({ probability, thresholds }) {
   const approveBelow = thresholds?.approve_below ?? 0.08;
-  const denyAtOrAbove = thresholds?.deny_at_or_above ?? 0.3;
+  const denyAtOrAbove = thresholds?.deny_at_or_above ?? 0.28;
 
   const maxScale = Math.min(
     1,

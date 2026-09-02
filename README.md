@@ -17,7 +17,7 @@ Pipeline runs end to end from the command line and over HTTP.
 - ✅ Backend — FastAPI wrapping the whole pipeline, SQLite audit log
 - ✅ Frontend — React + Vite loan-officer review UI (`app/frontend/`)
 - ✅ Fairness audit — age-band selection/denial rates, disparate-impact ratios, four-fifths rule (`src/fairness/`)
-- ✅ Model v2 — less-discriminatory alternative: age and every age-derived feature removed, re-tuned, re-audited ([comparison](#model-v2--the-less-discriminatory-alternative))
+- ✅ Model v2 (**default**) — less-discriminatory alternative: age and every age-derived feature removed, re-tuned, re-audited ([comparison](#model-v2--the-less-discriminatory-alternative))
 
 ## Architecture
 
@@ -29,7 +29,7 @@ flowchart TB
     subgraph TRAIN["training · offline"]
       D1["src/data + src/features<br/>clean · engineer"]
       D2["src/model/train<br/>XGBoost + early stopping"]
-      D1 --> D2 --> ART[("models/v1/<br/>model · clean stats<br/>eval report · calibration")]
+      D1 --> D2 --> ART[("models/v2/<br/>model · clean stats<br/>eval report · calibration")]
     end
     CSV --> D1
 
@@ -71,7 +71,7 @@ flowchart TB
 
     subgraph AUDIT["fairness audit · offline · measures outcomes only"]
       FA["src/fairness/report<br/>score dataset · band by age<br/>approval/denial rates · disparate-impact ratios<br/>four-fifths rule"]
-      FA --> FR[("models/v1/<br/>fairness_audit.json")]
+      FA --> FR[("models/v2/<br/>fairness_audit.json")]
     end
     CSV --> FA
     ART -. loaded .-> FA
@@ -115,9 +115,9 @@ under `data/raw/`. Not committed to the repo.
 
 ## Train a model
 ```bash
-python -m src.model.train                 # v1 config -> next free models/vN/ (model, eval report, calibration plot)
-python -m src.model.train --config v2     # v2 config: no age features, re-tuned hyperparameters
-python -m src.model.report v1             # re-print a version's AUC / KS / Brier
+python -m src.model.train                 # default (v2) config -> next free models/vN/ (model, eval report, calibration plot)
+python -m src.model.train --config v1     # the original baseline: every feature, age included
+python -m src.model.report v2             # re-print a version's AUC / KS / Brier
 python -m scripts.tune_hparams --config v2 --out /tmp/v2_grid.csv   # the CV grid behind v2's params
 ```
 
@@ -152,20 +152,26 @@ uvicorn app.backend.main:app --reload
 ### Decision policy
 
 The model outputs `P(serious delinquency)`; `src/model/decision.py` applies
-two cutoffs (tuned on the v1 validation split, overridable via
-`AIU_APPROVE_BELOW` / `AIU_DENY_AT_OR_ABOVE` — v2's recommended values are
-`0.08` / `0.28`, see below):
+two cutoffs. The defaults are v2's recommended values (derived on its
+validation split to keep the same band sizes as the original v1 policy,
+which was `0.08` / `0.30`); override with `AIU_APPROVE_BELOW` /
+`AIU_DENY_AT_OR_ABOVE`, and always set them together with
+`AIU_MODEL_VERSION` — a version's probabilities are not automatically on
+the default scale:
 
 | Band | Rule | Adverse-action notice |
 | --- | --- | --- |
 | `approved` | `P < 0.08` | none |
-| `referred` | `0.08 ≤ P < 0.30` | none (routed to a loan officer) |
-| `denied`   | `P ≥ 0.30` | generated |
+| `referred` | `0.08 ≤ P < 0.28` | none (routed to a loan officer) |
+| `denied`   | `P ≥ 0.28` | generated |
 
 ### `POST /review` — one example per band
 
-Run against `models/v1` with a real API key (`llm_provider: anthropic`,
-`model: claude-haiku-4-5`). Each call also persists a record.
+Run against `models/v1` (the original baseline, under its `0.08 / 0.30`
+cutoffs) with a real API key (`llm_provider: anthropic`,
+`model: claude-haiku-4-5`). Each call also persists a record. v2 produces
+the same shape of response; only the probabilities, the `deny_at_or_above`
+threshold, and the absence of age-derived features differ.
 
 **Approved** — `P(default) = 0.0219`
 ```json
@@ -237,10 +243,10 @@ demographic groups. It runs **after** the model decides and feeds nothing
 back — it cannot change a score or a decision (the core architectural rule).
 
 ```bash
-python -m src.fairness.report v1                 # audit models/v1 on the validation split
-python -m src.fairness.report v1 --split all     # audit on the whole dataset
-python -m src.fairness.report v1 --print-only    # print, write no artifact
-python -m src.fairness.report v2                 # audit v2 under the cutoffs recorded in its metadata.json
+python -m src.fairness.report v2                 # audit models/v2 on the validation split
+python -m src.fairness.report v2 --split all     # audit on the whole dataset
+python -m src.fairness.report v2 --print-only    # print, write no artifact
+python -m src.fairness.report v1                 # audit the v1 baseline under the cutoffs in its metadata.json (or the code defaults)
 ```
 
 Cutoffs come from `--approve-below` / `--deny-at-or-above` if given, else
@@ -322,11 +328,13 @@ v2 is the first step of that search: **`age` and every age-derived feature
 the hyperparameters are re-tuned by a small 3-fold CV grid on the training
 split (`scripts/tune_hparams.py`), and the audit is re-run. Nothing else
 changes: same data pipeline, same seed and split, same SHAP → reasons →
-LLM path, same three-band decision code. v1 remains the default model;
-serving v2 is configuration:
+LLM path, same three-band decision code. **v2 is the default model** — it
+is what `python -m src.model.train` builds and what the API serves unless
+told otherwise. Serving the v1 baseline is configuration (version and its
+cutoffs together):
 
 ```bash
-AIU_MODEL_VERSION=v2 AIU_APPROVE_BELOW=0.08 AIU_DENY_AT_OR_ABOVE=0.28 uvicorn app.backend.main:app
+AIU_MODEL_VERSION=v1 AIU_APPROVE_BELOW=0.08 AIU_DENY_AT_OR_ABOVE=0.30 uvicorn app.backend.main:app
 ```
 
 The serving path aligns each application to the loaded version's
@@ -350,9 +358,9 @@ vs 209).
 the same policy reasoning (keep ≈ 80 % auto-approved and ≈ 6 % auto-denied,
 then read off the default rate each band carries) gives `approve_below =
 0.08`, `deny_at_or_above = 0.28`. They are recorded in
-`models/v2/metadata.json` as `recommended_cutoffs`; the code defaults in
-`src/model/decision.py` are unchanged (v1 is still the default). Under v1's
-`0.30` the fairness picture below is the same to two decimals.
+`models/v2/metadata.json` as `recommended_cutoffs` and, since v2 is the
+default model, they are also the code defaults in `src/model/decision.py`.
+Under v1's `0.30` the fairness picture below is the same to two decimals.
 
 ### v1 vs v2 — validation split, n = 30 000
 

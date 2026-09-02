@@ -1,7 +1,8 @@
 """Derive recommended three-band cutoffs for a model version from its validation split.
 
 `src.model.decision` fixes the *shape* of the policy -- two cutoffs, three
-bands -- and its code defaults were tuned to v1's calibration:
+bands -- and the portfolio's risk appetite was set with the original v1
+policy:
 
     approved  P < 0.08       ~80% of applicants, ~2% observed default rate
     referred                 the ambiguous middle band
@@ -10,12 +11,13 @@ bands -- and its code defaults were tuned to v1's calibration:
 A new version's probabilities can sit on a different scale, so the same
 numbers are not automatically the same policy. This module re-derives the
 cutoffs for a version by the reasoning above -- keep the approve band and
-the deny band the same *size* as v1's (the portfolio's risk appetite, i.e.
-how many applicants are auto-approved and auto-declined), then report the
-observed default rate each band actually carries. The result is recorded
-in the version's ``metadata.json`` as ``recommended_cutoffs``; the code
-defaults in ``src.model.decision`` are not changed (v1 stays the default
-model) and serving picks the new numbers up through ``AIU_APPROVE_BELOW`` /
+the deny band the same *size* (how many applicants are auto-approved and
+auto-declined), then report the observed default rate each band actually
+carries. The result is recorded in the version's ``metadata.json`` as
+``recommended_cutoffs``. Training never rewrites the code defaults in
+``src.model.decision``; those are promoted by hand when a version becomes
+the default (v2's 0.08 / 0.28 are the current ones), and any other version
+is served with its own numbers through ``AIU_APPROVE_BELOW`` /
 ``AIU_DENY_AT_OR_ABOVE``.
 
 Nothing here decides an application: it is offline arithmetic over the
@@ -32,7 +34,8 @@ import numpy as np
 
 from src.model.decision import APPROVE_BELOW, APPROVED, DENIED, DENY_AT_OR_ABOVE, REFERRED
 
-# The v1 band shares the recommendation targets (see src.model.decision).
+# The original v1 policy's band shares are the recommendation targets, so
+# every version is sized to the same risk appetite.
 TARGET_APPROVE_SHARE = 0.80
 TARGET_DENY_SHARE = 0.06
 

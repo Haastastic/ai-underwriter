@@ -6,11 +6,18 @@ It lives next to the model layer -- not in the app -- so the CLI and the API
 share exactly one policy, and it is kept well away from ``src.llm``: the LLM
 layer is handed the decision this produces and never the reverse.
 
-Cutoffs (chosen from the v1 30k-row validation split; see models/v1):
+Cutoffs (the default model is v2; these are its ``recommended_cutoffs``
+from models/v2/metadata.json, derived on the 30k-row validation split by
+``src.model.cutoffs`` to keep the same band sizes as the original v1
+policy, which was 0.08 / 0.30):
 
-    P < 0.08            approved   ~80% of applicants, ~2.1% observed default rate
-    0.08 <= P < 0.30    referred   ~14% of applicants, the ambiguous middle band
-    P >= 0.30           denied     ~6%  of applicants, ~47% observed default rate
+    P < 0.08            approved   ~80% of applicants, ~2.2% observed default rate
+    0.08 <= P < 0.28    referred   ~14% of applicants, the ambiguous middle band
+    P >= 0.28           denied     ~6%  of applicants, ~46% observed default rate
+
+Serving another version means setting AIU_MODEL_VERSION together with that
+version's cutoffs (AIU_APPROVE_BELOW / AIU_DENY_AT_OR_ABOVE) -- a version's
+probabilities are not automatically on the same scale as these defaults.
 
 The `referred` band is what the loan-officer review UI (Phase 7) works.
 """
@@ -24,7 +31,7 @@ REFERRED = "referred"
 DENIED = "denied"
 
 APPROVE_BELOW = 0.08
-DENY_AT_OR_ABOVE = 0.30
+DENY_AT_OR_ABOVE = 0.28
 
 
 def decide(

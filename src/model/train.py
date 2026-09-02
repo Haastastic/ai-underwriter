@@ -1,7 +1,7 @@
 """Train the XGBoost underwriting model and persist a versioned artifact.
 
-    python -m src.model.train                  # v1 config -> next free models/vN/
-    python -m src.model.train --config v2      # v2 config (no age features)
+    python -m src.model.train                  # default (v2) config -> next free models/vN/
+    python -m src.model.train --config v1      # the original baseline, age features included
     python -m src.model.train --data data/raw/cs-training.csv
 
 Runs the data-layer pipeline, selects the feature set the chosen config
@@ -113,9 +113,9 @@ def run_training(
         "best_iteration": int(getattr(model, "best_iteration", -1) or -1),
         **cfg.to_metadata(),
         # Decision cutoffs are policy, not model: recorded here as a
-        # recommendation for this version's calibration, applied via
-        # AIU_APPROVE_BELOW / AIU_DENY_AT_OR_ABOVE. src.model.decision's
-        # defaults are unchanged.
+        # recommendation for this version's calibration. Training never
+        # rewrites src.model.decision's defaults; promoting a version's
+        # numbers to the code defaults is a deliberate, reviewed change.
         "recommended_cutoffs": recommend_cutoffs(y_val, y_val_prob),
     }
 
