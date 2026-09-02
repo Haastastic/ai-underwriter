@@ -1,0 +1,664 @@
+/* Tokens from the data-viz reference palette (light + selected dark). The
+   chart and the app chrome share one set so a factor's colour means the same
+   thing everywhere. */
+:root {
+  color-scheme: light;
+
+  --plane: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f2f1ec;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.1);
+
+  /* diverging pair — risk polarity */
+  --risk-up: #e34948; /* increases risk */
+  --risk-down: #2a78d6; /* decreases risk */
+
+  /* status — decision bands (icon + label always accompany these) */
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  --good-ink: #006300;
+
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(11, 11, 11, 0.04), 0 8px 24px rgba(11, 11, 11, 0.05);
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --plane: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #242422;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255, 255, 255, 0.1);
+    --risk-up: #e66767;
+    --risk-down: #3987e5;
+    --good-ink: #0ca30c;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--plane);
+  color: var(--ink);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--risk-down);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+/* ---- layout ---- */
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 14px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.app-header h1 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.app-header h1 span {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.app-nav {
+  display: flex;
+  gap: 4px;
+}
+
+.app-nav a {
+  padding: 6px 12px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.app-nav a.active {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.app-header .spacer {
+  flex: 1;
+}
+
+.main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 28px 24px 80px;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin: 0 0 4px;
+}
+
+.page-sub {
+  color: var(--ink-2);
+  margin: 0 0 24px;
+  font-size: 14px;
+}
+
+/* ---- card ---- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+  margin-bottom: 20px;
+}
+
+.card h2 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0 0 14px;
+}
+
+/* ---- health badge ---- */
+.health {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+
+.dot.ok {
+  background: var(--good);
+}
+
+.dot.down {
+  background: var(--critical);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.pill.warn {
+  color: var(--good-ink);
+  border-color: color-mix(in srgb, var(--warning) 45%, var(--border));
+}
+
+/* ---- decision badge ---- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+}
+
+.badge .glyph {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.badge.good {
+  color: var(--good-ink);
+  background: color-mix(in srgb, var(--good) 12%, transparent);
+  border-color: color-mix(in srgb, var(--good) 40%, var(--border));
+}
+.badge.warning {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
+  border-color: color-mix(in srgb, var(--warning) 55%, var(--border));
+}
+.badge.critical {
+  color: var(--critical);
+  background: color-mix(in srgb, var(--critical) 12%, transparent);
+  border-color: color-mix(in srgb, var(--critical) 40%, var(--border));
+}
+.badge.muted {
+  color: var(--ink-2);
+}
+
+/* ---- stat row ---- */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.stat {
+  background: var(--surface);
+  padding: 14px 16px;
+}
+
+.stat .k {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.stat .v {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.stat .v.hero {
+  font-size: 30px;
+}
+
+.stat .note {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* ---- probability bar ---- */
+.probbar {
+  margin-top: 4px;
+}
+
+.probbar .track {
+  position: relative;
+  height: 30px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  display: flex;
+}
+
+.probbar .zone {
+  height: 100%;
+}
+.probbar .zone.good {
+  background: color-mix(in srgb, var(--good) 22%, var(--surface));
+}
+.probbar .zone.warning {
+  background: color-mix(in srgb, var(--warning) 26%, var(--surface));
+}
+.probbar .zone.critical {
+  background: color-mix(in srgb, var(--critical) 22%, var(--surface));
+}
+
+.probbar .marker {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: var(--ink);
+}
+
+.probbar .marker::after {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: -3px;
+  border: 4px solid transparent;
+  border-top-color: var(--ink);
+}
+
+.probbar .scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.probbar .legend {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--ink-2);
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.probbar .legend b {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+/* ---- SHAP chart ---- */
+.shap-legend {
+  display: flex;
+  gap: 18px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  margin-bottom: 8px;
+}
+
+.shap-legend .key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.shap-legend .swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  flex: none;
+}
+
+.swatch.up {
+  background: var(--risk-up);
+}
+.swatch.down {
+  background: var(--risk-down);
+}
+
+.shap-wrap {
+  position: relative;
+  overflow-x: auto;
+}
+
+.shap-svg {
+  display: block;
+  width: 100%;
+  min-width: 520px;
+}
+
+.shap-svg .row-label {
+  fill: var(--ink);
+  font-size: 12px;
+}
+
+.shap-svg .row-value {
+  fill: var(--ink-2);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.shap-svg .axis {
+  stroke: var(--baseline);
+  stroke-width: 1;
+}
+
+.shap-svg .hit {
+  fill: transparent;
+}
+
+.shap-svg .hit:hover + .barmark,
+.shap-svg .row.hovered .barmark {
+  filter: brightness(1.08);
+}
+
+.shap-caption {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 10px;
+}
+
+.chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--ink);
+  color: var(--plane);
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 12px;
+  max-width: 240px;
+  box-shadow: var(--shadow);
+  z-index: 5;
+}
+
+.chart-tooltip .t-feat {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.chart-tooltip .t-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+/* ---- adverse action notice ---- */
+.notice {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--critical);
+  border-radius: 8px;
+  background: var(--surface-2);
+  padding: 16px;
+}
+
+.notice pre {
+  font-family: var(--font);
+  white-space: pre-wrap;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.notice .draft-flag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--good-ink);
+  margin-bottom: 8px;
+}
+
+.reason-list {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+/* ---- form ---- */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 16px;
+}
+
+.field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.field .hint {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.field input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--baseline);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.field input:focus-visible {
+  outline: 2px solid var(--risk-down);
+  outline-offset: 1px;
+}
+
+.field .err {
+  color: var(--critical);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+
+button.btn {
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+button.btn.primary {
+  background: var(--risk-down);
+  border-color: var(--risk-down);
+  color: #fff;
+  font-weight: 600;
+}
+
+button.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.presets {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.presets button {
+  font-size: 12.5px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px dashed var(--baseline);
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+/* ---- queue table ---- */
+.filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.filters button {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink-2);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.filters button.active {
+  background: var(--ink);
+  color: var(--plane);
+  border-color: var(--ink);
+}
+
+table.queue {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+table.queue th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+table.queue td {
+  padding: 10px;
+  border-bottom: 1px solid var(--grid);
+  vertical-align: middle;
+}
+
+table.queue tr {
+  cursor: pointer;
+}
+
+table.queue tbody tr:hover {
+  background: var(--surface-2);
+}
+
+table.queue .num {
+  font-variant-numeric: tabular-nums;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 20px;
+  font-size: 13px;
+}
+
+.kv dt {
+  color: var(--muted);
+}
+
+.kv dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.msg {
+  padding: 14px 16px;
+  border-radius: 8px;
+  font-size: 13.5px;
+}
+
+.msg.error {
+  background: color-mix(in srgb, var(--critical) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--critical) 35%, var(--border));
+  color: var(--critical);
+}
+
+.msg.empty {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--ink-2);
+}
+
+.loading {
+  color: var(--muted);
+  font-size: 14px;
+  padding: 20px 0;
+}
+
+.back-link {
+  display: inline-block;
+  font-size: 13px;
+  margin-bottom: 14px;
+}

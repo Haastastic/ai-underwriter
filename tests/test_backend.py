@@ -141,6 +141,20 @@ def test_health(client):
     assert body == {"status": "ok", "model_version": "v1", "llm_provider": "stub"}
 
 
+# --- CORS (the frontend is a separate origin) -------------------------
+
+
+def test_cors_allows_configured_frontend_origin(client):
+    origin = "http://localhost:5173"
+    resp = client.get("/health", headers={"Origin": origin})
+    assert resp.headers["access-control-allow-origin"] == origin
+
+
+def test_cors_omits_header_for_unknown_origin(client):
+    resp = client.get("/health", headers={"Origin": "http://evil.example"})
+    assert "access-control-allow-origin" not in resp.headers
+
+
 # --- predict ----------------------------------------------------------
 
 
@@ -229,6 +243,16 @@ def test_review_denial_persists_and_is_retrievable(client):
     assert fetched["application"] == HIGH_RISK_APPLICATION
     assert fetched["decision"]["decision"] == "denied"
     assert fetched["adverse_action"]["reason_features"]
+
+
+def test_stored_record_reports_decision_thresholds(client, settings):
+    review = client.post("/review", json=HIGH_RISK_APPLICATION).json()
+
+    fetched = client.get(f"/applications/{review['id']}").json()
+    assert fetched["decision"]["thresholds"] == {
+        "approve_below": settings.approve_below,
+        "deny_at_or_above": settings.deny_at_or_above,
+    }
 
 
 def test_review_approval_has_no_adverse_action(client):

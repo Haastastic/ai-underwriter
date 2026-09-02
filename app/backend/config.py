@@ -11,13 +11,21 @@ environment variables always win over `.env`, and tests never call it.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from src.llm.client import DEFAULT_MODEL
 from src.model.decision import APPROVE_BELOW, DENY_AT_OR_ABOVE
 
 ENV_FILE = Path(".env")
+
+# Where the Phase 7 loan-officer frontend runs during development. The built
+# static app served from the same origin as the API needs no entry here; a
+# separately hosted frontend adds its origin via AIU_CORS_ORIGINS.
+DEFAULT_CORS_ORIGINS = (
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+)
 
 
 def load_env_file(path: str | Path = ENV_FILE) -> bool:
@@ -49,6 +57,8 @@ class Settings:
     # with cutoffs tuned to its own calibration without a code change.
     approve_below: float = APPROVE_BELOW
     deny_at_or_above: float = DENY_AT_OR_ABOVE
+    # Browser origins allowed to call the API (the frontend dev server).
+    cors_origins: tuple[str, ...] = field(default_factory=lambda: DEFAULT_CORS_ORIGINS)
 
     @property
     def model_dir(self) -> Path:
@@ -73,4 +83,14 @@ def settings_from_env() -> Settings:
         deny_at_or_above=float(
             os.environ.get("AIU_DENY_AT_OR_ABOVE", base.deny_at_or_above)
         ),
+        cors_origins=_split_origins(
+            os.environ.get("AIU_CORS_ORIGINS"), base.cors_origins
+        ),
     )
+
+
+def _split_origins(raw: str | None, default: tuple[str, ...]) -> tuple[str, ...]:
+    """Parse a comma-separated origin list; blank/unset falls back to default."""
+    if not raw or not raw.strip():
+        return default
+    return tuple(part.strip() for part in raw.split(",") if part.strip())
