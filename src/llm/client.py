@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-# Per the claude-api skill: default to the most capable model and let the
-# caller downgrade. Adverse-action prose is short, so cost is low regardless.
-DEFAULT_MODEL = "claude-opus-5"
+# Rendering the fixed reason statements into a short notice is a light task,
+# so the default is the latest Haiku. The caller can pass a stronger model.
+DEFAULT_MODEL = "claude-haiku-4-5"
 
 
 @runtime_checkable

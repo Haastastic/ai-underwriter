@@ -14,6 +14,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from src.llm.client import DEFAULT_MODEL
 from src.model.decision import APPROVE_BELOW, DENY_AT_OR_ABOVE
 
 ENV_FILE = Path(".env")
@@ -42,7 +43,7 @@ class Settings:
     model_version: str = "v1"
     training_data_path: Path = Path("data/raw/cs-training.csv")
     db_path: Path = Path("underwriter.db")
-    llm_model: str = "claude-opus-5"
+    llm_model: str = DEFAULT_MODEL
     max_reasons: int = 4
     # Decision policy is config, not code: a new model version can be scored
     # with cutoffs tuned to its own calibration without a code change.
