@@ -2,6 +2,10 @@
 
 Kept as a plain dataclass (not pydantic-settings) so the model layer and
 tests can build one explicitly without any framework magic.
+
+`load_env_file()` reads a local `.env` (git-ignored) into the process
+environment before settings and the LLM client are resolved. Real
+environment variables always win over `.env`, and tests never call it.
 """
 
 from __future__ import annotations
@@ -11,6 +15,25 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.model.decision import APPROVE_BELOW, DENY_AT_OR_ABOVE
+
+ENV_FILE = Path(".env")
+
+
+def load_env_file(path: str | Path = ENV_FILE) -> bool:
+    """Load key=value pairs from `path` into os.environ if the file exists.
+
+    Existing environment variables are not overridden. Returns True if a
+    file was found and read. Imported lazily so the dependency is only
+    needed when this is actually called (the server entrypoint), not by the
+    test suite.
+    """
+    path = Path(path)
+    if not path.is_file():
+        return False
+    from dotenv import load_dotenv
+
+    load_dotenv(path, override=False)
+    return True
 
 
 @dataclass(frozen=True)

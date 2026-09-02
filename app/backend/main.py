@@ -22,7 +22,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 
-from app.backend.config import Settings, settings_from_env
+from app.backend.config import Settings, load_env_file, settings_from_env
 from app.backend.llm_client import build_llm_client
 from app.backend.schemas import (
     AdverseActionOut,
@@ -38,6 +38,7 @@ from app.backend.store import ReviewStore
 
 
 def build_service(settings: Settings | None = None) -> UnderwritingService:
+    load_env_file()  # populate ANTHROPIC_API_KEY / AIU_* from .env if present
     settings = settings or settings_from_env()
     llm_client, provider = build_llm_client()
     store = ReviewStore(settings.db_path)
