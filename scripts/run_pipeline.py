@@ -22,6 +22,8 @@ from src.llm.client import DEFAULT_MODEL
 from src.llm.prompt import build_system_prompt, build_user_prompt
 from src.llm.reasons import select_reasons
 from src.model.artifacts import load_model
+from src.model.config import align_features
+from src.model.cutoffs import resolve_cutoffs
 from src.model.dataset import build_model_frame, split_xy
 from src.model.decision import decide
 from src.model.train import DEFAULT_DATA_PATH
@@ -42,18 +44,22 @@ def main(argv=None) -> None:
     if not args.data.exists():
         raise SystemExit(f"Data not found: {args.data}")
 
-    model, feature_names = load_model(args.models_root / args.version)
+    model_dir = args.models_root / args.version
+    model, feature_names = load_model(model_dir)
     df = build_model_frame(args.data)
     X, _ = split_xy(df)
-    row = X.iloc[args.row].to_dict()
+    # The pipeline may emit more columns than this version uses (v2 leaves
+    # age out); the model only ever sees its own feature list.
+    row = align_features(X, feature_names).iloc[args.row].to_dict()
 
     explanation = explain_row(model, row, feature_names=feature_names)
     probability = explanation["predicted_probability"]
-    band = decide(probability)
+    approve_below, deny_at_or_above, cutoffs_source = resolve_cutoffs(model_dir)
+    band = decide(probability, approve_below, deny_at_or_above)
     decision = band["decision"]
 
     print(f"row {args.row}: P(serious delinquency) = {probability:.4f}")
-    print(f"decision: {decision}  (thresholds {band['thresholds']})")
+    print(f"decision: {decision}  (thresholds {band['thresholds']}; {cutoffs_source})")
     print("\ntop risk-increasing drivers (SHAP, log-odds):")
     for c in top_contributors(explanation, k=args.max_reasons):
         print(f"  {c['feature']:<42} value={c['value']:<12} shap={c['shap_value']:+.4f}")

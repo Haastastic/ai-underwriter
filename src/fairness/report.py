@@ -11,6 +11,16 @@ policy, groups applicants by the feature layer's age bands, and reports
 per-group approval / denial rates, adverse-impact ratios, and the
 four-fifths-rule verdict.
 
+Cutoffs
+-------
+The decision cutoffs come, in order of precedence, from ``--approve-below``
+/ ``--deny-at-or-above``, then from the version's own ``metadata.json``
+(``recommended_cutoffs``, written by ``src.model.train`` for every version
+from v2 on), then from the code defaults in ``src.model.decision``. So
+``python -m src.fairness.report v2`` audits v2 under v2's cutoffs -- the
+same numbers serving applies via ``AIU_APPROVE_BELOW`` /
+``AIU_DENY_AT_OR_ABOVE`` -- and the summary says which source was used.
+
 The audit only *measures* decisions the model already made -- it never
 scores or re-decides an application.
 
@@ -32,7 +42,7 @@ import json
 from pathlib import Path
 
 from src.fairness.audit import DEFAULT_DATA_PATH, run_audit
-from src.model.decision import APPROVE_BELOW, DENY_AT_OR_ABOVE
+from src.model.cutoffs import resolve_cutoffs
 
 _ARTIFACT_NAME = "fairness_audit.json"
 _IMMUTABLE_MODEL_FILES = {
@@ -46,6 +56,8 @@ _IMMUTABLE_MODEL_FILES = {
 
 def default_out_path(version: str, models_root: str | Path = "models") -> Path:
     return Path(models_root) / version / _ARTIFACT_NAME
+
+
 
 
 def _check_writable(path: Path, force: bool) -> None:
@@ -67,6 +79,13 @@ def _format_summary(report: dict) -> str:
         f"split={report['split']} -- n={report['n']}",
         f"protected attribute: {report['protected_attribute']} "
         "(see 'limitations' in the JSON)",
+        f"cutoffs: approve below {report['thresholds']['approve_below']}, "
+        f"deny at or above {report['thresholds']['deny_at_or_above']}"
+        + (
+            f"  [{report['cutoffs_source']}]"
+            if report.get("cutoffs_source")
+            else ""
+        ),
         "",
         f"{'group':<10} {'n':>7} {'approve%':>9} {'refer%':>9} "
         f"{'deny%':>9} {'appr.AIR':>9} {'deny.ratio':>11}",
@@ -113,8 +132,19 @@ def main(argv=None) -> None:
         default="val",
         help="score the stratified validation split (default) or every row",
     )
-    parser.add_argument("--approve-below", type=float, default=APPROVE_BELOW)
-    parser.add_argument("--deny-at-or-above", type=float, default=DENY_AT_OR_ABOVE)
+    parser.add_argument(
+        "--approve-below",
+        type=float,
+        default=None,
+        help="override the approve cutoff (default: the version's recorded "
+        "recommended_cutoffs, else src.model.decision's default)",
+    )
+    parser.add_argument(
+        "--deny-at-or-above",
+        type=float,
+        default=None,
+        help="override the deny cutoff (same fallback as --approve-below)",
+    )
     parser.add_argument(
         "--out",
         type=Path,
@@ -143,17 +173,22 @@ def main(argv=None) -> None:
         except (FileExistsError, ValueError) as exc:
             raise SystemExit(str(exc))
 
+    approve_below, deny_at_or_above, cutoffs_source = resolve_cutoffs(
+        model_dir, args.approve_below, args.deny_at_or_above
+    )
+
     try:
         report = run_audit(
             args.version,
             args.data,
             models_root=args.models_root,
             split=args.split,
-            approve_below=args.approve_below,
-            deny_at_or_above=args.deny_at_or_above,
+            approve_below=approve_below,
+            deny_at_or_above=deny_at_or_above,
         )
     except ValueError as exc:
         raise SystemExit(str(exc))
+    report["cutoffs_source"] = cutoffs_source
 
     print(_format_summary(report))
     print()

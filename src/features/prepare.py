@@ -8,7 +8,9 @@ serving uses this module instead:
   - missing values are filled from `clean_stats` (see
     `src.data.clean.fit_clean_stats`), computed once on the training data;
   - the engineered frame is reindexed to the model's exact feature list, so
-    the five age-bin columns a single row can't produce are filled with 0.
+    the five age-bin columns a single row can't produce are filled with 0,
+    and any engineered column the model version does not use (age and the
+    age-derived features, for v2) is dropped.
 """
 
 from __future__ import annotations
@@ -45,14 +47,18 @@ def prepare_application(
     row = engineer_features(row)
 
     aligned = row.reindex(columns=list(feature_names), fill_value=0)
+    # The only features a single row legitimately cannot produce are the
+    # one-hot age-band columns for the bands the applicant is *not* in;
+    # reindex filled those with 0, which is correct. Anything else the model
+    # expects but the feature layer did not produce means the feature code
+    # and the saved model have drifted apart.
     missing_features = set(feature_names) - set(row.columns)
-    unexpected = set(row.columns) - set(feature_names)
-    if unexpected:
+    unexplained = sorted(f for f in missing_features if not f.startswith("age_bin_"))
+    if unexplained:
         raise ValueError(
-            f"Prepared row produced features the model does not expect: "
-            f"{sorted(unexpected)}"
+            f"Feature layer did not produce features the model expects: "
+            f"{unexplained}"
         )
-    # `missing_features` are the absent age-bin dummies; reindex filled them
-    # with 0, which is correct (the applicant is not in those buckets).
-    _ = missing_features
+    # Columns the feature layer produced but this model version does not use
+    # (e.g. age for v2) are simply not selected -- the model never sees them.
     return aligned.astype("float64")

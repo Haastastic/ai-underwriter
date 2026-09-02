@@ -18,6 +18,17 @@ AGE_BIN_LABELS = ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"]
 _AGE_BIN_EDGES = AGE_BIN_EDGES
 _AGE_BIN_LABELS = AGE_BIN_LABELS
 
+# Every column `engineer_features` produces that is a function of `age`:
+# the raw field, the one-hot age bands, and the per-year-of-age ratio. This is
+# the list a model version excludes when it must not see age at all (see
+# `src.model.config` -- v2 drops all of these); it is defined here, in the
+# layer that creates the columns, so it cannot drift from the feature code.
+AGE_DERIVED_FEATURES: tuple[str, ...] = (
+    "age",
+    "credit_lines_per_year_of_age",
+    *(f"age_bin_{label}" for label in AGE_BIN_LABELS),
+)
+
 
 def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     """Add ratio, flag, and binned/encoded features to a cleaned DataFrame.
