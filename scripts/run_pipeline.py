@@ -1,16 +1,13 @@
 """End-to-end command-line run of the pipeline: data -> model -> SHAP -> notice.
 
     python -m scripts.run_pipeline --row 5
-    python -m scripts.run_pipeline --row 5 --threshold 0.15
     python -m scripts.run_pipeline --row 5 --print-prompt-only   # no API call
 
-Loads models/<version>/, scores one row from the dataset, explains it with
-SHAP, and -- when the decision is a denial -- generates the ECOA-style
-adverse-action notice.
-
-The probability -> decision threshold here is a demo policy that lives in
-this script only. The model layer produces a probability; the LLM layer is
-handed the resulting decision and never sees the score.
+Loads models/<version>/, scores one row from the dataset, applies the
+three-band decision policy (src.model.decision), explains the row with SHAP,
+and -- when the decision is a denial -- generates the ECOA-style
+adverse-action notice. The LLM layer is handed the decision and never sees
+the score.
 """
 
 from __future__ import annotations
@@ -26,6 +23,7 @@ from src.llm.prompt import build_system_prompt, build_user_prompt
 from src.llm.reasons import select_reasons
 from src.model.artifacts import load_model
 from src.model.dataset import build_model_frame, split_xy
+from src.model.decision import decide
 from src.model.train import DEFAULT_DATA_PATH
 
 
@@ -35,8 +33,6 @@ def main(argv=None) -> None:
     parser.add_argument("--version", default="v1", help="model version dir name")
     parser.add_argument("--data", type=Path, default=DEFAULT_DATA_PATH)
     parser.add_argument("--models-root", type=Path, default=Path("models"))
-    parser.add_argument("--threshold", type=float, default=0.5,
-                        help="demo-only probability cutoff for a denial")
     parser.add_argument("--max-reasons", type=int, default=4)
     parser.add_argument("--model", default=DEFAULT_MODEL, help="LLM model id")
     parser.add_argument("--print-prompt-only", action="store_true",
@@ -53,16 +49,17 @@ def main(argv=None) -> None:
 
     explanation = explain_row(model, row, feature_names=feature_names)
     probability = explanation["predicted_probability"]
-    decision = "denied" if probability >= args.threshold else "approved"
+    band = decide(probability)
+    decision = band["decision"]
 
     print(f"row {args.row}: P(serious delinquency) = {probability:.4f}")
-    print(f"decision (threshold {args.threshold}): {decision}")
+    print(f"decision: {decision}  (thresholds {band['thresholds']})")
     print("\ntop risk-increasing drivers (SHAP, log-odds):")
     for c in top_contributors(explanation, k=args.max_reasons):
         print(f"  {c['feature']:<42} value={c['value']:<12} shap={c['shap_value']:+.4f}")
 
     if decision != "denied":
-        print("\nNo adverse-action notice required for an approval.")
+        print(f"\nNo adverse-action notice required for a '{decision}' decision.")
         return
 
     reasons = select_reasons(explanation, max_reasons=args.max_reasons)

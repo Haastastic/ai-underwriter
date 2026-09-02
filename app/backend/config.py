@@ -1,0 +1,52 @@
+"""Backend settings, resolved from the environment with sensible defaults.
+
+Kept as a plain dataclass (not pydantic-settings) so the model layer and
+tests can build one explicitly without any framework magic.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from pathlib import Path
+
+from src.model.decision import APPROVE_BELOW, DENY_AT_OR_ABOVE
+
+
+@dataclass(frozen=True)
+class Settings:
+    models_root: Path = Path("models")
+    model_version: str = "v1"
+    training_data_path: Path = Path("data/raw/cs-training.csv")
+    db_path: Path = Path("underwriter.db")
+    llm_model: str = "claude-opus-5"
+    max_reasons: int = 4
+    # Decision policy is config, not code: a new model version can be scored
+    # with cutoffs tuned to its own calibration without a code change.
+    approve_below: float = APPROVE_BELOW
+    deny_at_or_above: float = DENY_AT_OR_ABOVE
+
+    @property
+    def model_dir(self) -> Path:
+        return self.models_root / self.model_version
+
+
+def settings_from_env() -> Settings:
+    """Build Settings, letting AIU_* environment variables override defaults."""
+    base = Settings()
+    return Settings(
+        models_root=Path(os.environ.get("AIU_MODELS_ROOT", base.models_root)),
+        model_version=os.environ.get("AIU_MODEL_VERSION", base.model_version),
+        training_data_path=Path(
+            os.environ.get("AIU_TRAINING_DATA", base.training_data_path)
+        ),
+        db_path=Path(os.environ.get("AIU_DB_PATH", base.db_path)),
+        llm_model=os.environ.get("AIU_LLM_MODEL", base.llm_model),
+        max_reasons=int(os.environ.get("AIU_MAX_REASONS", base.max_reasons)),
+        approve_below=float(
+            os.environ.get("AIU_APPROVE_BELOW", base.approve_below)
+        ),
+        deny_at_or_above=float(
+            os.environ.get("AIU_DENY_AT_OR_ABOVE", base.deny_at_or_above)
+        ),
+    )
