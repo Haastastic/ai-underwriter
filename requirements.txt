@@ -15,6 +15,7 @@ pydantic>=2.0
 
 # LLM
 anthropic>=0.25
+python-dotenv>=1.0   # load .env at backend startup
 
 # Dev / test
 pytest>=8.0
