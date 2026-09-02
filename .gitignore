@@ -19,6 +19,10 @@ data/processed/*
 models/**
 !models/.gitkeep
 
+# Local SQLite databases (runtime state, not checked in)
+*.db
+*.sqlite3
+
 # Secrets
 .env
 
