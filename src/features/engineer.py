@@ -7,8 +7,16 @@ keeps the later SHAP/adverse-action story readable.
 
 import pandas as pd
 
-_AGE_BIN_EDGES = [0, 25, 35, 45, 55, 65, 120]
-_AGE_BIN_LABELS = ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"]
+# Public so downstream layers (e.g. the Phase 8 fairness audit) group by the
+# *same* age bands the model's one-hot features use, rather than redefining
+# edges that could drift out of sync.
+AGE_BIN_EDGES = [0, 25, 35, 45, 55, 65, 120]
+AGE_BIN_LABELS = ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"]
+
+# Backwards-compatible private aliases (kept so nothing importing the old
+# names breaks).
+_AGE_BIN_EDGES = AGE_BIN_EDGES
+_AGE_BIN_LABELS = AGE_BIN_LABELS
 
 
 def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -33,7 +41,7 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
         df["NumberOfOpenCreditLinesAndLoans"] / df["age"]
     )
 
-    age_bin = pd.cut(df["age"], bins=_AGE_BIN_EDGES, labels=_AGE_BIN_LABELS)
+    age_bin = pd.cut(df["age"], bins=AGE_BIN_EDGES, labels=AGE_BIN_LABELS)
     age_dummies = pd.get_dummies(age_bin, prefix="age_bin", dtype=int)
     df = pd.concat([df, age_dummies], axis=1)
 

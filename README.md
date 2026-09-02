@@ -16,7 +16,7 @@ Pipeline runs end to end from the command line and over HTTP.
 - ✅ LLM layer — SHAP dict → ECOA-style adverse-action text (Claude, `claude-haiku-4-5` by default)
 - ✅ Backend — FastAPI wrapping the whole pipeline, SQLite audit log
 - ✅ Frontend — React + Vite loan-officer review UI (`app/frontend/`)
-- ⬜ Fairness audit — disparate-impact ratios
+- ✅ Fairness audit — age-band selection/denial rates, disparate-impact ratios, four-fifths rule (`src/fairness/`)
 
 ## Architecture
 
@@ -68,14 +68,24 @@ flowchart TB
     O --> OUT["JSON response<br/>decision + explanation + notice"]
     OUT --> FE["app/frontend<br/>React + Vite · loan-officer review UI"]
 
+    subgraph AUDIT["fairness audit · offline · measures outcomes only"]
+      FA["src/fairness/report<br/>score dataset · band by age<br/>approval/denial rates · disparate-impact ratios<br/>four-fifths rule"]
+      FA --> FR[("models/v1/<br/>fairness_audit.json")]
+    end
+    CSV --> FA
+    ART -. loaded .-> FA
+
     style DEC stroke:#2e7d32,stroke-width:2px
     style EXP stroke:#1565c0,stroke-width:2px
+    style AUDIT stroke:#6a1b9a,stroke-width:2px
 ```
 
 The gradient-boosted model produces the score **and** the decision; SHAP
 explains it; the LLM only turns the SHAP output into adverse-action prose,
 and only for denials. Nothing on the explanation path feeds back into the
-decision.
+decision. The fairness audit sits entirely downstream: it re-scores a
+dataset through the *same* decision policy and measures how the three bands
+fall across age groups — it never scores or re-decides an application.
 
 ## Layout
 ```
@@ -85,6 +95,7 @@ src/features/    feature engineering + single-row inference prep
 src/model/       training, evaluation, decision policy, artifact persistence
 src/explain/     SHAP explainability
 src/llm/         SHAP -> plain-language adverse-action text
+src/fairness/    post-hoc group fairness audit (age-band disparate impact)
 app/backend/     FastAPI service
 app/frontend/    loan-officer review UI
 models/          versioned trained model artifacts (gitignored)
@@ -206,6 +217,86 @@ npm run dev                                # http://localhost:5173
 The dev server proxies `/api/*` to the backend, so no CORS setup is needed
 locally. A separately hosted build calls the API cross-origin; list its origin
 in `AIU_CORS_ORIGINS`. See `app/frontend/README.md` for details.
+
+## Fairness audit (`src/fairness/`)
+
+An independent, post-hoc layer that re-scores a dataset through the exact
+serving decision policy and measures how the three bands fall across
+demographic groups. It runs **after** the model decides and feeds nothing
+back — it cannot change a score or a decision (the core architectural rule).
+
+```bash
+python -m src.fairness.report v1                 # audit models/v1 on the validation split
+python -m src.fairness.report v1 --split all     # audit on the whole dataset
+python -m src.fairness.report v1 --print-only    # print, write no artifact
+```
+
+The JSON report is written to `models/<version>/fairness_audit.json`,
+alongside the model it audits; the model's own immutable files are never
+touched, and an existing report is only replaced with `--force`.
+
+**What it computes** (all as plain dicts / DataFrames, per the cross-layer
+convention):
+
+| Metric | Definition |
+| --- | --- |
+| approval / referral / denial rate per group | share of each group placed in that band |
+| adverse-impact ratio (AIR) | group approval rate ÷ approval rate of the most-approved group |
+| four-fifths rule | AIR `< 0.80` for any group is flagged (`passes: false`) |
+| denial-rate ratio | group denial rate ÷ denial rate of the least-denied group; flagged `> 1.25` |
+
+An "acceptance" AIR (approved **or** referred, i.e. "not denied") is
+reported alongside the strict approval AIR, since a referral is not itself
+an adverse action.
+
+### Protected attribute — and its limitation
+
+"Give Me Some Credit" carries no race, sex, ethnicity, national-origin, or
+marital-status fields. `age` is the only demographic attribute in it, and
+age is an ECOA-protected basis, so the audit groups applicants by the **same
+age bands** the feature layer already bins to (`src/features/engineer.py`).
+This is a dataset limitation, not a modelling choice: a production
+fair-lending audit would repeat every metric here for race, sex, national
+origin, marital status, age (≥ 62), and receipt of public assistance —
+typically via a proxy method such as BISG where those attributes are not
+collected directly.
+
+### How the design connects to ECOA adverse-action requirements
+
+ECOA and Regulation B require that a declined applicant receive the
+**specific, accurate principal reasons** for the decision, and separately
+that a creditor's policies not produce an unjustified **disparate impact**
+on a protected basis. The pipeline is built around both halves:
+
+- **Reasons are accurate by construction.** The gradient-boosted model
+  makes the decision; SHAP identifies the factors that actually moved *that*
+  application; the LLM only renders those factors into sentences. It has no
+  access to the model or the score and cannot introduce, drop, or re-rank a
+  reason — so what the applicant is told always matches why the model
+  decided.
+- **Age is never given as a reason.** Age and every age-derived feature are
+  removed from the adverse-action reason list regardless of SHAP rank
+  (Reg B, 12 CFR 1002.6(b)(2)). An applicant is never told they were denied
+  because of their age.
+- **The three bands keep denials narrow and reviewable.** Only `denied`
+  triggers a notice; the ambiguous middle band is `referred` to a human
+  rather than auto-declined, which shrinks the set of decisions that must
+  carry a statement of specific reasons.
+- **The audit closes the loop.** Adverse-action notices explain individual
+  decisions; this audit checks the *aggregate* pattern of those same
+  decisions for disparate impact on a protected basis.
+
+### Reading the v1 result
+
+On the shipped v1 model the audit flags **REVIEW**: `age` is a model
+feature and older applicants are genuinely lower-risk in this dataset, so
+the youngest bands sit well below the 0.80 approval AIR and above the 1.25
+denial-rate ratio. That is exactly the signal the audit exists to surface.
+A production response would be a less-discriminatory-alternative search —
+e.g. removing `age` and the age-derived features from the model, or
+constraining/monitoring their effect — followed by re-running this audit;
+the point of keeping the audit as its own layer is that such a change is
+measured here without touching the decision, explanation, or LLM code.
 
 ## Tests
 ```bash
